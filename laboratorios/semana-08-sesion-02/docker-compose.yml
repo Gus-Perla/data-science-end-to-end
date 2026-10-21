@@ -1,0 +1,22 @@
+services:
+  python-app:
+    build: .
+    container_name: semana-08
+    volumes:
+      - ./data-contenedor:/app/starter/figuras
+
+  ejercicio2:
+    build: .
+    container_name: semana-08-ejercicio2
+    working_dir: /app/plantilla-ejercicio2
+    command: ["python3", "explorar_relaciones.py"]
+    volumes:
+      - ./data-contenedor/ejercicio2:/app/plantilla-ejercicio2/figuras
+
+  eda:
+    build: .
+    container_name: semana-08-eda
+    working_dir: /app/plantilla-eda
+    command: ["python3", "explorar_proyecto.py"]
+    volumes:
+      - ./data-contenedor/eda:/app/plantilla-eda/figuras

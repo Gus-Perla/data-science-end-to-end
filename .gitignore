@@ -18,3 +18,7 @@ data/processed/
 
 # Logs
 *.log
+
+# Datos publicos de Alibaba del Ejercicio 3 (se descargan, ver plantilla-eda/README.md)
+laboratorios/semana-08-sesion-02/plantilla-eda/*.csv/
+laboratorios/semana-08-sesion-02/plantilla-eda/*.zip
