@@ -2,7 +2,7 @@
   // Ambiente del curso, igual en GitHub Codespaces y en VS Code local ("Reopen in Container").
   // Referencia: https://containers.dev/implementors/json_reference/
   "name": "Fundamentos de Ciencia de Datos (USFQ)",
-  "image": "mcr.microsoft.com/devcontainers/python:3-3.11-bookworm",
+  "image": "mcr.microsoft.com/devcontainers/python:3-3.11-trixie",
 
   // Docker-in-Docker (y no docker-outside-of-docker): los "docker run -v $(pwd)/...",
   // el socket que monta Kestra y el provider de Docker de Terraform necesitan que las
