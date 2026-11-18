@@ -24,17 +24,22 @@ A partir de la lectura previa:
 
 **Según el artículo, ¿qué diferencia a una feature que tiene sentido de negocio de una que solo mejora una métrica?**
 
-_(tu respuesta)_
+Una feature con sentido de negocio traduce algo que alguien del negocio ya sabe que mueve el resultado (una regla de precios, un comportamiento de los clientes, una restricción operativa) a una columna que el modelo puede usar. Por eso se puede explicar en una frase, se sabe por qué debería funcionar y se espera que siga funcionando con datos nuevos. Una feature que solo mejora la métrica es una combinación encontrada por prueba y error: sube el puntaje en la validación, pero nadie sabe explicar por qué, puede ser casualidad del conjunto de datos o, peor, una fuga del objetivo, y se rompe cuando cambian los datos. Además, la feature con sentido de negocio tiene que existir en el momento de predecir y poder calcularse en producción.
 
 **Elige uno de los ejemplos del artículo: ¿qué conocimiento del negocio traduce a una columna, y cómo?**
 
-_(tu respuesta)_
+Un ejemplo típico es el de clientes y compras: el negocio sabe que un cliente que lleva mucho tiempo sin comprar está a punto de irse. Ese conocimiento no está en ninguna columna cruda (solo están las fechas de cada compra), pero se traduce a una columna de **recencia**: días desde la última compra hasta la fecha de corte (`fecha_corte - max(fecha_compra)` por cliente), junto con la frecuencia (número de compras en una ventana) y el monto. El modelo no tiene que "descubrir" la regla a partir de fechas sueltas: se la damos ya calculada, en las unidades en que el negocio piensa.
 
 ## Pregunta de apertura
 
 La exploración encontró dos patrones que no existen como columnas: la tarifa fija entre JFK y Manhattan, y viajes que cuestan más por kilómetro a ciertas horas. El modelo solo ve columnas. ¿Cómo le das esa información?
 
-_(tu respuesta)_
+Construyendo columnas nuevas a partir de las que ya existen, usando lo que sabemos del negocio:
+
+- **Tarifa fija:** una columna binaria `es_tarifa_fija` que vale 1 cuando el viaje va de JFK a una zona de Manhattan o al revés. Con ella, un modelo lineal puede aprender un ajuste propio para esos viajes en lugar de forzarlos a seguir la recta de la distancia.
+- **Hora:** de `fecha_hora_inicio` (que el modelo no puede usar como texto) se sacan la hora, el día de la semana, `es_fin_de_semana` y `es_hora_pico` (horas pico en días de semana). Así el modelo puede aprender que en hora pico el kilómetro cuesta más (por el tráfico, que alarga la duración). Para la hora como número continuo se usa su seno y coseno, para que las 23 y las 0 queden juntas.
+
+Todas existen en el momento en que se pide el taxi, así que se pueden usar en producción.
 
 ## Ejercicio 1: features de fecha y hora
 
@@ -42,19 +47,21 @@ Notebook: [`starter/ejercicio1_features_tiempo.ipynb`](./starter/ejercicio1_feat
 
 **Respuesta 1 (TODO 4), antes de ver la solución:** si dejas la hora como un número del 0 al 23, ¿qué tan lejos queda la hora 23 de la hora 0 para un modelo que mide distancias entre números? ¿Y en el reloj?
 
-_(tu respuesta)_
+Como número, la hora 23 y la hora 0 están a **23 unidades**, la distancia máxima posible: el modelo las trataría como las horas más distintas del día. En el reloj están a **una hora**, igual que las 11 y las 12. Con `hora_sin` y `hora_cos` la hora es un punto en un círculo, y el Paso 5 lo confirma: 23 y 0 quedan a **0.26**, exactamente la misma distancia que 11 y 12 (0.26).
 
 **Respuesta 2 (TODO 3):** sin el TODO 3, el Paso 4 muestra un solo grupo. Con la hora pico construida, ¿esperas que la tarifa por kilómetro sea más alta o más baja en hora pico? ¿Por qué, si la tarifa depende de la distancia y de la duración?
 
-_(tu respuesta)_
+Más alta. La tarifa del taxímetro tiene un componente por distancia y otro por tiempo; en hora pico el tráfico hace que cada kilómetro tome más minutos, así que se paga más por kilómetro. La salida lo confirma: la mediana de la tarifa por km es **3.52 en hora pico contra 3.22 fuera de ella** (antes del TODO 3 había un solo grupo, con mediana 3.35). Los minutos por kilómetro explican la diferencia: 3.64 en hora pico contra 2.79 fuera.
 
 **Respuesta 3:** la duración del viaje no existe al pedir el taxi, pero la hora sí. ¿Qué parte de lo que la duración le diría al modelo puede traer `es_hora_pico`?
 
-_(tu respuesta)_
+La parte de la duración que se debe al **tráfico**: cuántos minutos por kilómetro va a tomar el viaje según el momento del día. La duración tiene dos componentes: la distancia (que ya está en `distancia_km`) y la velocidad. `es_hora_pico` le da al modelo una señal de la velocidad esperada (3.64 min/km en hora pico contra 2.79 fuera), sin usar información del futuro. Lo que no puede traer es lo imprevisible de cada viaje en particular: un accidente, una desviación o un semáforo.
 
 **Lo que confirmó la salida, TODO por TODO:**
 
-_(anota la tarifa por kilómetro en cada grupo y las dos distancias del Paso 5)_
+- **TODO 1 y 2:** el primer viaje (2026-09-06 13:46) queda con `hora = 13`, `dia_semana = 6` (domingo) y `es_fin_de_semana = 1`.
+- **TODO 3:** 888 de 2975 viajes son de hora pico. Tarifa por km (mediana, sin tarifa fija ni distancia 0): **3.22 fuera de hora pico y 3.52 en hora pico**.
+- **TODO 4 (Paso 5):** 23 y 0 están a 23 como número y a **0.26** como ciclo; 11 y 12 están a 1 como número y a **0.26** como ciclo. En el reloj ambos pares están igual de cerca.
 
 ## Durante el ConcepTest
 
@@ -76,15 +83,20 @@ Solo o en pareja. Notebook: [`starter/ejercicio2_features_zona.ipynb`](./starter
 
 **Respuesta 1:** ¿cuántos viajes tienen `es_tarifa_fija` en 1, y qué tarifa mínima y máxima tienen? ¿Qué te dice eso sobre lo que un modelo lineal puede aprender con esta columna?
 
-_(tu respuesta)_
+**300 viajes**, y todos tienen tarifa mínima **70.00** y máxima **70.00**: la tarifa no varía nada dentro del grupo. Para un modelo lineal, esta columna es casi perfecta: le permite aprender que esos viajes tienen un precio fijo, que no depende de la distancia. Pero el modelo lineal solo suma un ajuste constante (`coeficiente · es_tarifa_fija`) encima de lo que ya predice con la distancia; como esos viajes miden entre 13 y 45 km, la parte de la distancia seguiría moviendo la predicción. Para capturarlo del todo hace falta una interacción (por ejemplo `distancia_km · (1 - es_tarifa_fija)`) o un modelo de árboles, que puede separar el grupo y predecir 70 directamente.
 
 **Respuesta 2:** ¿cuántas columnas crea one-hot para la zona de origen, y cuántas la codificación ordinal? Si el modelo es una regresión lineal, ¿cuál de las dos usarías, y por qué la otra le da información falsa?
 
-_(tu respuesta)_
+One-hot crea **8 columnas** (una por zona: `origen_Brooklyn`, `origen_Harlem`, ..., `origen_Upper West Side`); la codificación ordinal crea **1 columna** con valores de 0 (Brooklyn) a 7 (Upper West Side). Para una regresión lineal usaría **one-hot**: cada zona recibe su propio coeficiente. La ordinal le da información falsa: le dice al modelo que las zonas tienen un orden y que la distancia entre ellas significa algo, por ejemplo que Upper West Side (7) es "siete veces Brooklyn" o que JFK (2) está "entre" Harlem (1) y Lower Manhattan (3), solo por el orden alfabético. El modelo tendría que asignar un efecto que crece de forma lineal con ese número, algo que no tiene sentido. (Un modelo de árboles sí tolera la ordinal, porque solo hace cortes.)
 
 **Respuesta 3:** ¿qué columnas del dataset no existen al pedir el taxi? ¿Qué pasaría con el modelo si las usaras para entrenar?
 
-_(tu respuesta)_
+- `duracion_min`: se conoce cuando el viaje termina.
+- `propina`: se decide después de conocer la tarifa.
+- `metodo_pago`: en un taxi de calle se elige al pagar, al final (en una app podría conocerse antes, pero no lo asumo).
+- `tarifa`: es el objetivo.
+
+`distancia_km` real tampoco existe exactamente al pedir, pero se puede estimar con la ruta entre origen y destino, así que se usa la estimada. Si entrenara con duración o propina, el modelo se vería excelente en la evaluación (la duración tiene correlación 0.956 con la tarifa) porque estaría "viendo" parte de la respuesta, pero en producción esas columnas no existen: o no se puede correr, o hay que llenarlas con algo y las predicciones se desploman. Es fuga de información.
 
 ## Ejercicio 3: dos features para tu proyecto
 
@@ -112,4 +124,4 @@ _(tu respuesta)_
 
 Para escalar la distancia antes de entrenar, le restas la media y la divides por la desviación estándar. ¿Con qué viajes calculas esa media: con todos, o solo con los de entrenamiento? ¿Cambia algo?
 
-_(tu respuesta)_
+Solo con los viajes de entrenamiento. Si calculo la media y la desviación con todos, la información de los viajes de prueba se filtra al preprocesamiento: el conjunto de prueba deja de ser "datos que el modelo nunca vio" y la evaluación queda un poco optimista. Con distancia el efecto suele ser pequeño, pero el principio es el mismo que con cualquier fuga, y en transformaciones más agresivas (imputar con la media, seleccionar features, *target encoding*) la diferencia puede ser grande. Lo correcto es ajustar el escalador con `fit` solo en entrenamiento y aplicar ese mismo escalador (`transform`) a prueba y a producción; un `Pipeline` de scikit-learn lo hace automáticamente, incluso dentro de la validación cruzada.

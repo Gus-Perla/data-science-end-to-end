@@ -37,12 +37,12 @@ class Viaje(BaseModel):
     # datetime, para que una fecha mal escrita se rechace) y las zonas son
     # obligatorias; distancia_km, pasajeros y metodo_pago pueden llegar
     # vacios (la preparacion los imputa), con valor por defecto None.
-    fecha_hora_inicio = datetime
+    fecha_hora_inicio: datetime
     zona_origen: str
     zona_destino: str
-    distancia_km: float | None
-    pasajeros: float | None
-    metodo_pago: str | None
+    distancia_km: float | None = None
+    pasajeros: float | None = None
+    metodo_pago: str | None = None
 
 
 @app.get("/salud")
@@ -55,8 +55,8 @@ def predecir(viaje: Viaje):
     # TODO 2: convierte el viaje en un DataFrame de una fila
     # (viaje.model_dump() lo da como diccionario), agrega las features y
     # estima la tarifa con el modelo.
-    dto = pd.DataFrame([viaje.model_dump()])
-    datos_enriquecidos = agregar_features(datos[CATEGORICAS + YA_LISTAS + NUMERICAS])
-    tarifa = modelo.predict(datos_enriquecidos[CATEGORICAS + YA_LISTAS + NUMERICAS])
+    datos = pd.DataFrame([viaje.model_dump()])
+    datos_enriquecidos = agregar_features(datos)
+    tarifa = modelo.predict(datos_enriquecidos[NUMERICAS + YA_LISTAS + CATEGORICAS])[0]
 
     return {"tarifa_estimada": round(float(tarifa), 2)}

@@ -24,17 +24,17 @@ A partir de la lectura previa:
 
 **Según el artículo, ¿qué es la fuga de información, y por qué un modelo con fuga puede verse excelente en la evaluación y fallar en producción?**
 
-_(tu respuesta)_
+La fuga de información (*data leakage*) ocurre cuando el modelo, durante el entrenamiento, tiene acceso a información que no tendrá en el momento real de predecir: datos del conjunto de prueba, o columnas que contienen (directa o indirectamente) la respuesta. El modelo aprende a apoyarse en esa información, y la evaluación lo premia porque el conjunto de prueba la contiene igual. Por eso las métricas salen excelentes. En producción esa información no existe (la columna no está, o los datos nuevos no se parecen a los que se usaron para preparar), y el rendimiento cae: la evaluación medía algo que el modelo nunca va a poder hacer de verdad.
 
 **El artículo describe varias formas en que se produce una fuga. ¿Cuál de ellas viste la sesión pasada con la duración del viaje?**
 
-_(tu respuesta)_
+La **fuga del objetivo** (*target leakage*): usar como feature una variable que solo se conoce después del evento que se quiere predecir. La duración del viaje se conoce al terminar, igual que la tarifa, y está casi determinada junto con ella (correlación 0.956). La otra forma, la **contaminación entre entrenamiento y prueba** (calcular estadísticas de preprocesamiento con todos los datos antes de dividir), es la del Ejercicio 1 de hoy.
 
 ## Pregunta de apertura
 
 Para escalar la distancia, le restas la media y la divides por la desviación estándar. ¿Con qué viajes calculas esa media: con todos, o solo con los de entrenamiento? ¿Cambia algo?
 
-_(tu respuesta)_
+Solo con los de entrenamiento. Si la media y la desviación se calculan con todos los viajes, el preprocesamiento ya "vio" los viajes de prueba y la evaluación deja de medir el rendimiento sobre datos nuevos. En producción, el escalador tendrá que usar estadísticas calculadas con el pasado, nunca con los datos que llegan. Con la distancia el cambio numérico es pequeño (la media pasa de 8.5034 con todo a 8.5576 solo con entrenamiento), pero la regla es la misma para cualquier paso que aprende algo de los datos: imputar, escalar, codificar o seleccionar features se ajusta (`fit`) solo con entrenamiento.
 
 ## Ejercicio 1: encontrar y corregir la fuga
 
@@ -47,19 +47,23 @@ python3 ejercicio1_fuga.py
 
 **Respuesta 1, antes de ver la solución:** en la versión del compañero, ¿en qué línea entra el conjunto de prueba al entrenamiento? ¿Qué número de la salida lo delata?
 
-_(tu respuesta)_
+En la **línea 26**: `X_preparado = escalador.fit_transform(imputador.fit_transform(X))`. El imputador y el escalador aprenden la mediana, la media y la desviación con las 2975 filas, antes de `train_test_split`, así que las filas que luego serán de prueba ya influyeron en la preparación. Lo delata la salida `Filas que vio el escalador: 2975`: si solo hubiera aprendido de entrenamiento (80%), serían 2380.
 
 **Respuesta 2 (TODO 1 y 3):** sin resolver, la versión correcta dice que tiene 2975 filas de prueba. ¿Qué está midiendo ese error, si prueba y entrenamiento son las mismas filas?
 
-_(tu respuesta)_
+Mide el **error de entrenamiento**, no el de generalización: el modelo se evalúa sobre las mismas 2975 filas con las que aprendió. Dice qué tan bien se ajusta a datos que ya vio, no qué tan bien predice viajes nuevos. Para una regresión lineal con dos variables la diferencia es pequeña (2.5590), pero con un modelo flexible podría ser casi 0 y no significar nada.
 
 **Respuesta 3:** ¿cuánto esperas que cambie el error absoluto medio en prueba al corregir la fuga? Si casi no cambia, ¿significa que no había fuga?
 
-_(tu respuesta)_
+Casi nada, y así fue: **2.5375 con fuga contra 2.5373 corregida**. Que casi no cambie **no significa que no había fuga**: la fuga estaba (el escalador vio 2975 filas y usó media 8.5034 en lugar de 8.5576), solo que en este caso es benigna porque la mediana y la media de 2975 viajes casi no cambian al quitar el 20%, y una regresión lineal es invariante al escalado. El tamaño del efecto depende de los datos y del paso que filtra: con pocos datos, con *target encoding*, con selección de features o con datos que cambian en el tiempo, la misma fuga puede inflar mucho la métrica. Lo que se corrige es el procedimiento, no un número.
 
 **Lo que confirmó la salida, TODO por TODO:**
 
-_(anota las filas que vio cada escalador y los dos errores)_
+| versión | filas que vio el escalador | media de distancia | filas de prueba | MAE en prueba |
+|---|---|---|---|---|
+| compañero (con fuga) | 2975 | 8.5034 | 595 | 2.5375 |
+| sin resolver | (no escala) | — | 2975 | 2.5590 |
+| correcta (TODO 1 a 3) | 2380 | 8.5576 | 595 | 2.5373 |
 
 ## Durante el ConcepTest
 
@@ -85,15 +89,21 @@ python3 ejercicio2_pipeline.py
 
 **Respuesta 1:** ¿cuántas columnas quedan después de preparar los datos? Explica de dónde sale ese número a partir de los tres grupos de columnas.
 
-_(tu respuesta)_
+Quedan **25 columnas** (2380 × 25 en entrenamiento y 595 × 25 en prueba):
+
+- Numéricas: 2 (`distancia_km`, `pasajeros`), imputadas y escaladas, siguen siendo 2.
+- Categóricas: one-hot crea una columna por categoría vista en entrenamiento: 8 de `zona_origen` + 8 de `zona_destino` + 2 de `metodo_pago` = 18.
+- Ya listas: 5 (`hora_sin`, `hora_cos`, `es_fin_de_semana`, `es_hora_pico`, `es_tarifa_fija`) pasan sin cambios.
+
+2 + 18 + 5 = 25.
 
 **Respuesta 2:** ¿las medianas que aprendió el imputador coinciden con las de entrenamiento o con las de todo el dataset? ¿Qué demuestra eso?
 
-_(tu respuesta)_
+Coinciden con las de **entrenamiento**: el imputador aprendió `distancia_km = 6.94` y `pasajeros = 1.0`, iguales a las medianas de entrenamiento; la de todo el dataset es 6.93. Demuestra que el `fit` del `ColumnTransformer` solo usó las filas de entrenamiento: el conjunto de prueba no participó en lo que aprendió la preparación, así que no hay fuga. (La diferencia es pequeña, pero es la que distingue un procedimiento correcto de uno con fuga.)
 
 **Respuesta 3:** ¿qué le pasa al viaje desde el Bronx? ¿Qué habría pasado con `pd.get_dummies` aplicado por separado a ese viaje?
 
-_(tu respuesta)_
+El Bronx no apareció en entrenamiento, así que con `handle_unknown="ignore"` el viaje queda con **las 8 columnas de `zona_origen` en 0** (`zona_origen_en_1 = 0`): el modelo lo trata como "ninguna zona conocida" y predice con el resto de las features. El viaje sigue teniendo **25 columnas**, las mismas que espera el modelo. Con `pd.get_dummies` aplicado solo a ese viaje, saldrían columnas como `zona_origen_Bronx`, `zona_destino_Midtown` y `metodo_pago_tarjeta`: una sola columna por variable, con nombres y cantidad distintos a los del entrenamiento. El modelo recibiría una matriz de otra forma y fallaría (o, si se alinean por posición, usaría columnas equivocadas). Por eso la codificación tiene que aprenderse una vez, con entrenamiento, y reutilizarse.
 
 ## Ejercicio 3: el pipeline de tu proyecto, como script
 
@@ -137,4 +147,4 @@ _(lo que imprimió tu script)_
 
 Ya tienes los datos listos para entrenar. Si entrenas dos modelos sobre el mismo conjunto y uno da un error mucho menor en entrenamiento que en prueba, ¿qué le está pasando?
 
-_(tu respuesta)_
+Está **sobreajustando** (*overfitting*): aprendió detalles y ruido propios del conjunto de entrenamiento en lugar del patrón general, así que no generaliza a datos nuevos. Es un problema de alta varianza: el modelo es demasiado flexible para la cantidad de datos (por ejemplo, un árbol muy profundo). Se corrige limitando su complejidad (profundidad máxima, regularización), con más datos o combinando muchos modelos en un ensamble (como *bagging* o un bosque aleatorio), que promedia la varianza de cada uno. El modelo que hay que elegir es el de menor error en **prueba**, no en entrenamiento.
